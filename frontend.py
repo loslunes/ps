@@ -460,7 +460,7 @@ def calculate_arrow(labels,resPred):
     
                 
 def printHeader(model,tokenizer):
-    printStaticHeader()
+    
     with st.form(key='my_form'):
         text_area= st.text_area (
             label="Entre aqui el texto:",
@@ -585,13 +585,89 @@ def format():
         </style>
 """, unsafe_allow_html=True)
 
-format() 
-f1 = basePath / 'ROBERTA_MP'
-f2 = basePath / 'ROBERTA_TP'
 
-# Declare modelo as a global variable at the module level
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+import os
 
+SERVICE_ACCOUNT_FILE = './llmodels-450621-83f51dac86fa.json'
 
+# Define the required scope
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+
+# Authenticate using the service account
+creds = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+
+# Build the Google Drive API service
+drive_service = build('drive', 'v3', credentials=creds)
+
+# List files accessible by the service account
+#results = drive_service.files().list(
+   #pageSize=10, fields="nextPageToken, files(id, name)").execute()
+
+#items = results.get('files', [])
+
+#if not items:
+    #st.write('No files found.')
+#else:
+   # st.write('Files:')
+   # for item in items:
+      #  st.write(f"{item['name']} ({item['id']})")
+
+# Set up credentials
+#creds = service_account.Credentials.from_service_account_file(
+    #'./llmodels-450621-83f51dac86fa.json',
+   # scopes=['https://www.googleapis.com/auth/drive.readonly']
+#)
+
+# Create Google Drive API service
+#drive_service = build('drive', 'v3', credentials=creds)
+
+def download_folder(folder_id, local_path):
+    if not os.path.exists(local_path):
+        os.makedirs(local_path)
+
+    results = drive_service.files().list(
+        q=f"'{folder_id}' in parents",
+        fields="files(id, name, mimeType)"
+    ).execute()
+
+    items = results.get('files', [])
+    for item in items:
+        if item['mimeType'] == 'application/vnd.google-apps.folder':
+            subfolder_path = os.path.join(local_path, item['name'])
+            download_folder(item['id'], subfolder_path)
+        else:
+            file_path = os.path.join(local_path, item['name'])
+            request = drive_service.files().get_media(fileId=item['id'])
+            fh = io.FileIO(file_path, 'wb')
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+                
+printStaticHeader()
+
+st.text("We are downloading the model from googledrive")
+
+# Replace with your actual folder IDs
+roberta_mp_folder_id = '1sSYdPiZea2xNvT40TlwNElNi4VGLFmEr'
+roberta_tp_folder_id = '1el7y75RMWQ_S73R0ZTsslxoh70BvbvBA'
+
+#if st.button("Download ROBERTA_MP"):
+with st.spinner("Downloading ROBERTA_MP..."):
+    download_folder(roberta_mp_folder_id, './ROBERTA_MP')
+st.success("ROBERTA_MP downloaded successfully!")
+
+#if st.button("Download ROBERTA_TP"):
+with st.spinner("Downloading ROBERTA_TP..."):
+    download_folder(roberta_tp_folder_id, './ROBERTA_TP')
+st.success("ROBERTA_TP downloaded successfully!")
+
+st.empty()
 global modelo
 modelo = None
 loaded_model = False
@@ -625,8 +701,11 @@ load_model()
 # Load the tokenizer
 tokenizer = load_tokenizer()
 
+
+
 if modelo is not None and tokenizer is not None:
     modelo.eval()
     printHeader(modelo, tokenizer)
 else:
     st.write("Imposible seguir por los errores de carga")
+
